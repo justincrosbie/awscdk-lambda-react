@@ -2,31 +2,16 @@ import * as cdk from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as apigateway from 'aws-cdk-lib/aws-apigateway';
-import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as s3deploy from 'aws-cdk-lib/aws-s3-deployment';
 import * as cloudfront from 'aws-cdk-lib/aws-cloudfront';
 import * as origins from 'aws-cdk-lib/aws-cloudfront-origins';
-import * as iam from 'aws-cdk-lib/aws-iam';
 import * as path from 'path';
 import * as logs from 'aws-cdk-lib/aws-logs';
-import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
 
 export class IntentNormalizerStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
-
-    // DynamoDB table for storing normalized intents
-    const table = new dynamodb.Table(this, 'NormalizedIntents', {
-      partitionKey: { name: 'normalized_text', type: dynamodb.AttributeType.STRING },
-      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
-    });
-
-    table.addGlobalSecondaryIndex({
-      indexName: 'KeyPhraseIndex',
-      partitionKey: { name: 'key_phrase', type: dynamodb.AttributeType.STRING },
-      projectionType: dynamodb.ProjectionType.ALL
-    });
 
     // S3 bucket for storing analytics data
     const bucket = new s3.Bucket(this, 'AnalyticsBucket', {
@@ -34,88 +19,47 @@ export class IntentNormalizerStack extends cdk.Stack {
       encryption: s3.BucketEncryption.S3_MANAGED,
     });
 
-    const layer = new lambda.LayerVersion(this, 'DependenciesLayer', {
-      code: lambda.Code.fromAsset('lambda_layer'),
-      compatibleRuntimes: [lambda.Runtime.PYTHON_3_9],
-      description: 'Dependencies for intent normalization',
-    });
-
-    // Reference the existing secret
-    const openAiSecret = secretsmanager.Secret.fromSecretNameV2(this, 'OpenAIApiKey', 'openai-api-key');
-
     // Lambda function for intent normalization
     const normalizer = new lambda.Function(this, 'IntentNormalizer', {
       runtime: lambda.Runtime.PYTHON_3_9,
       handler: 'index.handler',
       code: lambda.Code.fromAsset('lambda'),
       environment: {
-        TABLE_NAME: table.tableName,
         BUCKET_NAME: bucket.bucketName,
-        OPENAI_API_KEY_SECRET_NAME: 'openai-api-key',
+        CSV_FILE_NAME: 'categorized_intents.csv',
       },
       timeout: cdk.Duration.seconds(300),
       memorySize: 2048,
       logRetention: logs.RetentionDays.ONE_WEEK,
-      layers: [layer],
     });
 
-    // Grant the Lambda function permission to read the secret
-    openAiSecret.grantRead(normalizer);
-
-    // Grant the Lambda function read/write permissions to DynamoDB and S3
-    table.grantReadWriteData(normalizer);
-    bucket.grantReadWrite(normalizer);
-
-    // Add permissions for Amazon Comprehend
-    normalizer.addToRolePolicy(new iam.PolicyStatement({
-      actions: ['comprehend:DetectKeyPhrases'],
-      resources: ['*'],
-    }));
+    // Grant the Lambda function read permissions to S3
+    bucket.grantRead(normalizer);
 
     // API Gateway
     const api = new apigateway.RestApi(this, 'NormalizerApi', {
       restApiName: 'Intent Normalizer Service',
-      description: 'This service normalizes intents and provides analytics.',
+      description: 'This service provides intent analytics.',
       defaultCorsPreflightOptions: {
-        allowOrigins: ['https://d1ohmnvezrnn40.cloudfront.net'],
+        // allowOrigins: ['https://dx6afv9vd0gy8.cloudfront.net', 'http://localhost:3001'],
+        allowOrigins: apigateway.Cors.ALL_ORIGINS,
         allowMethods: apigateway.Cors.ALL_METHODS,
-        allowHeaders: ['Content-Type', 'X-Amz-Date', 'Authorization', 'X-Api-Key'],
+        allowHeaders: ['Content-Type', 'X-Amz-Date', 'Authorization', 'X-Api-Key', 'X-Amz-Security-Token'],
         allowCredentials: true,
       },
     });
 
     const intents = api.root.addResource('intents');
     
-    intents.addMethod('POST', new apigateway.LambdaIntegration(normalizer, {
-      proxy: true,
-      integrationResponses: [{
-        statusCode: '200',
-      }],
-    }));
-    
     // GET method for retrieving normalized intents with counts
     intents.addMethod('GET', new apigateway.LambdaIntegration(normalizer, {
       proxy: true,
-      integrationResponses: [{
-        statusCode: '200',
-      }],
     }));
 
-    // New endpoint for processing file
-    const update = intents.addResource('update');
-    update.addMethod('POST', new apigateway.LambdaIntegration(normalizer, {
+    // New GET method for retrieving raw CSV data
+    const csvData = api.root.addResource('data');
+    csvData.addMethod('GET', new apigateway.LambdaIntegration(normalizer, {
       proxy: true,
-      integrationResponses: [{
-        statusCode: '200',
-      }],
-    }));
-    
-    // DELETE method for clearing all data
-    intents.addMethod('DELETE', new apigateway.LambdaIntegration(normalizer, {
-      proxy: true,
-      integrationResponses: [{
-        statusCode: '200',
-      }],
     }));
 
     // S3 bucket for React app
