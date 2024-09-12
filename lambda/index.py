@@ -6,63 +6,106 @@ import re
 from collections import defaultdict
 import traceback
 import sys
+import openai
 
 # Initialize AWS clients
 dynamodb = boto3.resource('dynamodb')
 s3 = boto3.client('s3')
-comprehend = boto3.client('comprehend')
+secrets_manager = boto3.client('secretsmanager')
 
-# Get environment variables
 TABLE_NAME = os.environ['TABLE_NAME']
 BUCKET_NAME = os.environ['BUCKET_NAME']
+OPENAI_API_KEY_SECRET_NAME = os.environ['OPENAI_API_KEY_SECRET_NAME']
 
 table = dynamodb.Table(TABLE_NAME)
 
-def log_error(error_message):
-    print(f"ERROR: {error_message}", file=sys.stderr)
-    print(traceback.format_exc(), file=sys.stderr)
-
-def normalize_text(text):
-    return re.sub(r'[^a-z0-9\s]', '', text.lower())
-
-def get_key_phrases(text):
+# Retrieve the OpenAI API Key from Secrets Manager
+def get_openai_api_key():
     try:
-        response = comprehend.detect_key_phrases(Text=text, LanguageCode='en')
-        return [phrase['Text'].lower() for phrase in response['KeyPhrases']]
+        print(f"Reading OPENAI_API_KEY_SECRET_NAME {OPENAI_API_KEY_SECRET_NAME}")
+        response = secrets_manager.get_secret_value(SecretId=OPENAI_API_KEY_SECRET_NAME)
+        return json.loads(response['SecretString'])['OPENAI_API_KEY']
     except Exception as e:
-        print(f"Error in get_key_phrases: {str(e)}")
-        return []
+        print(f"Error retrieving OpenAI API Key: {str(e)}")
+        raise
 
-def find_similar_intent(normalized_text, key_phrases):
+# Initialize OpenAI with the retrieved API key
+openai.api_key = get_openai_api_key()
+
+def normalize_intents(intents):
+    prompt = f"""You are an AI assistant specialized in normalizing customer service intents. 
+    Your task is to read the following list of intents and provide a normalized, canonical version for each.
+    Use previous normalizations where applicable to maintain consistency.
+    Here are the intents:
+
+    {intents}
+
+    For each intent, provide the normalized version in the following format:
+    Original: [original intent]
+    Normalized: [normalized intent]
+
+    Ensure that the normalized intents are concise, clear, and consistent across similar requests."""
+
     try:
-        response = table.query(
-            KeyConditionExpression=Key('normalized_text').eq(normalized_text)
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": "You are a helpful assistant that normalizes customer service intents."},
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=1000,
+            n=1,
+            stop=None,
+            temperature=0.5,
         )
-        if response['Items']:
-            return response['Items'][0]['canonical_intent']
+
+        results = response.choices[0].message['content'].strip()
+        print(f"LLM results: {results}")
         
-        for phrase in key_phrases:
-            response = table.query(
-                IndexName='KeyPhraseIndex',
-                KeyConditionExpression=Key('key_phrase').eq(phrase)
-            )
-            if response['Items']:
-                return response['Items'][0]['canonical_intent']
-        
-        return None
+        return results
     except Exception as e:
-        print(f"Error in find_similar_intent: {str(e)}")
-        return None
+        print(f"Error in normalize_intents: {str(e)}")
+        raise
+
+def parse_normalized_intents(normalized_text):
+    lines = normalized_text.split('\n')
+    parsed_intents = []
+    current_intent = {}
+    
+    for line in lines:
+        if line.startswith("Original:"):
+            if current_intent:
+                parsed_intents.append(current_intent)
+                current_intent = {}
+            current_intent['original'] = line.replace("Original:", "").strip()
+        elif line.startswith("Normalized:"):
+            current_intent['normalized'] = line.replace("Normalized:", "").strip()
+    
+    if current_intent:
+        parsed_intents.append(current_intent)
+    
+    return parsed_intents
+
+def update_dynamodb_and_analytics(parsed_intents):
+    for intent in parsed_intents:
+        table.put_item(
+            Item={
+                'normalized_text': intent['normalized'],
+                'original_intent': intent['original'],
+                'canonical_intent': intent['normalized'],
+            }
+        )
+        update_analytics(intent['original'], intent['normalized'])
 
 def update_analytics(intent, canonical_intent):
     try:
         response = s3.get_object(Bucket=BUCKET_NAME, Key='analytics.json')
         analytics = json.loads(response['Body'].read())
     except s3.exceptions.NoSuchKey:
-        analytics = defaultdict(int)
+        analytics = {}
     except Exception as e:
         print(f"Error reading analytics.json: {str(e)}")
-        analytics = defaultdict(int)
+        analytics = {}
     
     analytics[canonical_intent] = analytics.get(canonical_intent, 0) + 1
     
@@ -75,6 +118,44 @@ def update_analytics(intent, canonical_intent):
         )
     except Exception as e:
         print(f"Error updating analytics.json: {str(e)}")
+
+def handle_update(body):
+    try:
+        file_name = body.get('file_name', 'intents.txt')
+        print(f"Attempting to read file: {file_name} from bucket: {BUCKET_NAME}")
+        response = s3.get_object(Bucket=BUCKET_NAME, Key=file_name)
+        file_content = response['Body'].read().decode('utf-8')
+        
+        print(f"File contents: {file_content[:100]}")  # Print first 100 characters
+        
+        normalized_text = normalize_intents(file_content)
+        parsed_intents = parse_normalized_intents(normalized_text)
+        update_dynamodb_and_analytics(parsed_intents)
+        
+        return {
+            'statusCode': 200,
+            'body': json.dumps({
+                'message': 'File processed successfully',
+                'normalized_intents': parsed_intents
+            })
+        }
+    except Exception as e:
+        print(f"Error in handle_update: {str(e)}")
+        print(traceback.format_exc())
+        return {
+            'statusCode': 500,
+            'body': json.dumps({
+                'message': 'Error processing file',
+                'error': str(e),
+                'traceback': traceback.format_exc()
+            })
+        }
+
+def log_error(error_message):
+    print(f"ERROR: {error_message}", file=sys.stderr)
+    print(traceback.format_exc(), file=sys.stderr)
+
+
 
 def get_normalized_intents():
     try:
@@ -95,42 +176,6 @@ def add_cors_headers(response):
     }
     return response
 
-def handle_post(body):
-    try:
-        intent = body['intent']
-        normalized_text = normalize_text(intent)
-        key_phrases = get_key_phrases(normalized_text)
-        canonical_intent = find_similar_intent(normalized_text, key_phrases) or intent
-
-        print(f"Putting item in DynamoDB: {normalized_text}")
-        table.put_item(
-            Item={
-                'normalized_text': normalized_text,
-                'original_intent': intent,
-                'canonical_intent': canonical_intent,
-                'key_phrases': key_phrases
-            }
-        )
-
-        update_analytics(intent, canonical_intent)
-
-        return {
-            'statusCode': 200,
-            'body': json.dumps({
-                'message': 'Intent processed successfully',
-                'canonical_intent': canonical_intent
-            })
-        }
-    except Exception as e:
-        print(f"Error in handle_post: {str(e)}")
-        print(traceback.format_exc())
-        return {
-            'statusCode': 500,
-            'body': json.dumps({
-                'message': 'Error processing intent',
-                'error': str(e)
-            })
-        }
 
 def handle_get():
     try:
@@ -149,89 +194,6 @@ def handle_get():
             'body': json.dumps({
                 'message': 'Error retrieving normalized intents',
                 'error': str(e)
-            })
-        }
-
-def process_file_contents(contents):
-    results = []
-    for line in contents.split('\n'):
-        line = line.strip()
-        if line:
-            print(f"Processing intent: {line}")
-            result = handle_single_intent(line)
-            results.append(result)
-    return results
-
-def handle_single_intent(intent):
-    try:
-        normalized_text = normalize_text(intent)
-        print(f"Normalized text: {normalized_text}")
-        
-        key_phrases = get_key_phrases(normalized_text)
-        print(f"Key phrases: {key_phrases}")
-        
-        canonical_intent = find_similar_intent(normalized_text, key_phrases) or normalized_text
-        print(f"Canonical intent: {canonical_intent}")
-
-        print(f"Putting item in DynamoDB: {normalized_text}")
-        table.put_item(
-            Item={
-                'normalized_text': normalized_text,
-                'original_intent': intent,
-                'canonical_intent': canonical_intent,
-                'key_phrases': key_phrases
-            }
-        )
-
-        print(f"Updating analytics for: {canonical_intent}")
-        update_analytics(intent, canonical_intent)
-
-        return {
-            'original_intent': intent,
-            'canonical_intent': canonical_intent,
-            'normalized_text': normalized_text,
-            'key_phrases': key_phrases
-        }
-    except Exception as e:
-        log_error(f"Error processing intent '{intent}': {str(e)}")
-        return {
-            'original_intent': intent,
-            'error': str(e),
-            'traceback': traceback.format_exc()
-        }
-
-def handle_update(body):
-    try:
-        file_name = body.get('file_name', 'intents.txt')
-        print(f"Attempting to read file: {file_name} from bucket: {BUCKET_NAME}")
-        response = s3.get_object(Bucket=BUCKET_NAME, Key=file_name)
-        file_content = response['Body'].read().decode('utf-8')
-        
-        print(f"File contents: {file_content[:100]}...")  # Print first 100 characters
-        
-        results = process_file_contents(file_content)
-        
-        successful = [r for r in results if 'error' not in r]
-        failed = [r for r in results if 'error' in r]
-        
-        return {
-            'statusCode': 200,
-            'body': json.dumps({
-                'message': 'File processed',
-                'total_processed': len(results),
-                'successful': len(successful),
-                'failed': len(failed),
-                'failed_details': failed
-            })
-        }
-    except Exception as e:
-        log_error(f"Error in handle_update: {str(e)}")
-        return {
-            'statusCode': 500,
-            'body': json.dumps({
-                'message': 'Error processing file',
-                'error': str(e),
-                'traceback': traceback.format_exc()
             })
         }
 
@@ -275,14 +237,11 @@ def handler(event, context):
         http_method = event['httpMethod']
         resource = event['resource']
         
-        if http_method == 'POST' and resource == '/intents':
-            body = json.loads(event['body'])
-            return add_cors_headers(handle_post(body))
-        elif http_method == 'GET' and resource == '/intents':
-            return add_cors_headers(handle_get())
-        elif http_method == 'POST' and resource == '/intents/update':
+        if http_method == 'POST' and resource == '/intents/update':
             body = json.loads(event['body'])
             return add_cors_headers(handle_update(body))
+        elif http_method == 'GET' and resource == '/intents':
+            return add_cors_headers(handle_get())
         elif http_method == 'DELETE' and resource == '/intents':
             return add_cors_headers(clear_all_data())
         elif http_method == 'OPTIONS':

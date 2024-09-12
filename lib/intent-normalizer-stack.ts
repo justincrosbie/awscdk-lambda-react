@@ -10,6 +10,7 @@ import * as origins from 'aws-cdk-lib/aws-cloudfront-origins';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as path from 'path';
 import * as logs from 'aws-cdk-lib/aws-logs';
+import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
 
 export class IntentNormalizerStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
@@ -33,6 +34,15 @@ export class IntentNormalizerStack extends cdk.Stack {
       encryption: s3.BucketEncryption.S3_MANAGED,
     });
 
+    const layer = new lambda.LayerVersion(this, 'DependenciesLayer', {
+      code: lambda.Code.fromAsset('lambda_layer'),
+      compatibleRuntimes: [lambda.Runtime.PYTHON_3_9],
+      description: 'Dependencies for intent normalization',
+    });
+
+    // Reference the existing secret
+    const openAiSecret = secretsmanager.Secret.fromSecretNameV2(this, 'OpenAIApiKey', 'openai-api-key');
+
     // Lambda function for intent normalization
     const normalizer = new lambda.Function(this, 'IntentNormalizer', {
       runtime: lambda.Runtime.PYTHON_3_9,
@@ -41,11 +51,16 @@ export class IntentNormalizerStack extends cdk.Stack {
       environment: {
         TABLE_NAME: table.tableName,
         BUCKET_NAME: bucket.bucketName,
+        OPENAI_API_KEY_SECRET_NAME: 'openai-api-key',
       },
-      timeout: cdk.Duration.seconds(300),  // Increase timeout to 5 minutes
-      memorySize: 1024,  // Increase memory to 1 GB
-      logRetention: logs.RetentionDays.ONE_WEEK,  // Retain logs for one week
+      timeout: cdk.Duration.seconds(300),
+      memorySize: 2048,
+      logRetention: logs.RetentionDays.ONE_WEEK,
+      layers: [layer],
     });
+
+    // Grant the Lambda function permission to read the secret
+    openAiSecret.grantRead(normalizer);
 
     // Grant the Lambda function read/write permissions to DynamoDB and S3
     table.grantReadWriteData(normalizer);
