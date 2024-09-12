@@ -22,7 +22,6 @@ table = dynamodb.Table(TABLE_NAME)
 # Retrieve the OpenAI API Key from Secrets Manager
 def get_openai_api_key():
     try:
-        print(f"Reading OPENAI_API_KEY_SECRET_NAME {OPENAI_API_KEY_SECRET_NAME}")
         response = secrets_manager.get_secret_value(SecretId=OPENAI_API_KEY_SECRET_NAME)
         return json.loads(response['SecretString'])['OPENAI_API_KEY']
     except Exception as e:
