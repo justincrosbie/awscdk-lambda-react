@@ -28,6 +28,11 @@ const Dashboard: React.FC = () => {
     chart: {
       type: 'bar' as const,
     },
+    plotOptions: {
+      bar: {
+        horizontal: true,
+      },
+    },
     xaxis: {
       categories: intents.map(intent => intent.intent),
     },
