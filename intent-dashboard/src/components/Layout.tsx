@@ -23,6 +23,9 @@ import {
 import { useTheme } from '../contexts/ThemeContext';
 import { Link, useLocation } from 'react-router-dom';
 
+import mobileLogo from '../assets/images/Trusst-AI-Artboard-6@2x.png';
+import desktopLogo from '../assets/images/Trusst-AI-Grad-COL@2x.png';
+
 interface LayoutProps {
   children: React.ReactNode;
 }
@@ -94,100 +97,108 @@ function ProfileMenu() {
 }
 
 export function Layout({ children }: LayoutProps) {
-  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
-  const [isDesktopSidebarOpen, setIsDesktopSidebarOpen] = useState(true);
-  const { theme, colors } = useTheme();
-
-  const toggleMobileSidebar = () => setIsMobileSidebarOpen((cur) => !cur);
-  const toggleDesktopSidebar = () => setIsDesktopSidebarOpen((cur) => !cur);
-
-  useEffect(() => {
-    const handleResize = () => {
-      if (window.innerWidth >= 960) {
-        setIsMobileSidebarOpen(false);
-      }
-    };
-
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
-
-  return (
-    <div className={`min-h-screen ${theme === 'dark' ? 'dark bg-gray-900 text-white' : 'bg-gray-50 text-gray-700'}`}
-    >
-      <Navbar className={`sticky top-0 z-10 h-max max-w-full rounded-none py-2 px-4 lg:px-8 lg:py-4 
-      ${theme === 'dark' ? 'bg-gray-800 border-none' : 'bg-white border-gray-200'}`}
-      style={{ backgroundColor: colors.background, borderColor: colors.border }}>
-        <div className="flex items-center justify-between">
-          <Typography
-            as="a"
-            href="#"
-            variant="h6"
-            className="mr-4 cursor-pointer py-1.5 lg:ml-2 font-bold"
-          >
-            Trusst AI
-          </Typography>
-          <div className="hidden lg:flex gap-4 items-center">
-            <IconButton variant="text" className={theme === 'dark' ? 'text-white' : 'text-gray-700'}>
-              <BellIcon className="h-5 w-5" />
-            </IconButton>
-            <ProfileMenu />
-          </div>
-          <IconButton
-            variant="text"
-            className="lg:hidden"
-            onClick={toggleMobileSidebar}
-          >
-            {isMobileSidebarOpen ? (
-              <XMarkIcon className="h-6 w-6" strokeWidth={2} />
-            ) : (
-              <Bars3Icon className="h-6 w-6" strokeWidth={2} />
-            )}
-          </IconButton>
-        </div>
-      </Navbar>
-      <div className="flex">
-        {/* Mobile Sidebar */}
-        <Drawer
-          open={isMobileSidebarOpen}
-          onClose={toggleMobileSidebar}
-          className={`p-4 ${theme === 'dark' ? 'bg-gray-800' : 'bg-white'}`}
-        >
-          <div className="mb-6 flex items-center justify-between">
-            <Typography variant="h5" color={theme === 'dark' ? 'white' : 'blue-gray'}>
-              Trusst AI
-            </Typography>
-            <IconButton variant="text" color={theme === 'dark' ? 'white' : 'blue-gray'} onClick={toggleMobileSidebar}>
-              <XMarkIcon className="h-5 w-5" />
-            </IconButton>
-          </div>
-          <NavList isDesktopSidebarOpen={true} />
-        </Drawer>
-
-        {/* Desktop Sidebar */}
-        <aside className={`${
-          isDesktopSidebarOpen ? 'w-64' : 'w-20'
-        } transition-all duration-300 ease-in-out hidden lg:block ${
-          theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
-        } border-r`}
+    const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+    const [isDesktopSidebarOpen, setIsDesktopSidebarOpen] = useState(true);
+    const { theme, colors } = useTheme();
+  
+    const toggleMobileSidebar = () => setIsMobileSidebarOpen((cur) => !cur);
+    const toggleDesktopSidebar = () => setIsDesktopSidebarOpen((cur) => !cur);
+  
+    useEffect(() => {
+      const handleResize = () => {
+        if (window.innerWidth >= 960) {
+          setIsMobileSidebarOpen(false);
+        }
+      };
+  
+      window.addEventListener('resize', handleResize);
+      return () => window.removeEventListener('resize', handleResize);
+    }, []);
+  
+    return (
+      <div className={`min-h-screen ${theme === 'dark' ? 'dark bg-gray-900 text-white' : 'bg-gray-50 text-gray-700'}`}
+      >
+        <Navbar className={`sticky top-0 z-10 h-max max-w-full rounded-none py-2 px-4 lg:px-8 lg:py-4 
+        ${theme === 'dark' ? 'bg-gray-800 border-none' : 'bg-white border-gray-200'}`}
         style={{ backgroundColor: colors.background, borderColor: colors.border }}>
-          <div className="p-4">
-            <IconButton onClick={toggleDesktopSidebar} className="mb-4">
-              {isDesktopSidebarOpen ? 
-                <ChevronLeftIcon className="h-5 w-5" /> 
-                : 
-                <ChevronRightIcon className="h-5 w-5" />
-              }
+          <div className="flex items-center justify-between">
+            <div className="flex items-center">
+              {/* Desktop logo */}
+              <img
+                src={desktopLogo}
+                alt="Trusst AI"
+                className="hidden lg:block h-8 mr-4"
+              />
+              {/* Mobile logo */}
+              <img
+                src={mobileLogo}
+                alt="Trusst AI"
+                className="lg:hidden h-8 mr-4"
+              />
+            </div>
+            <div className="hidden lg:flex gap-4 items-center">
+              <IconButton variant="text" className={theme === 'dark' ? 'text-white' : 'text-gray-700'}>
+                <BellIcon className="h-5 w-5" />
+              </IconButton>
+              <ProfileMenu />
+            </div>
+            <IconButton
+              variant="text"
+              className="lg:hidden"
+              onClick={toggleMobileSidebar}
+            >
+              {isMobileSidebarOpen ? (
+                <XMarkIcon className="h-6 w-6" strokeWidth={2} />
+              ) : (
+                <Bars3Icon className="h-6 w-6" strokeWidth={2} />
+              )}
             </IconButton>
-            <NavList isDesktopSidebarOpen={isDesktopSidebarOpen} />
           </div>
-        </aside>
-
-        {/* Main Content */}
-        <main className="flex-grow p-6" style={{ backgroundColor: colors.background, borderColor: colors.border }}>
-          {children}
-        </main>
+        </Navbar>
+        <div className="flex">
+          {/* Mobile Sidebar */}
+          <Drawer
+            open={isMobileSidebarOpen}
+            onClose={toggleMobileSidebar}
+            className={`p-4 ${theme === 'dark' ? 'bg-gray-800' : 'bg-white'}`}
+          >
+            <div className="mb-6 flex items-center justify-between">
+              <img
+                src={mobileLogo}
+                alt="Trusst AI"
+                className="h-8"
+              />
+              <IconButton variant="text" color={theme === 'dark' ? 'white' : 'blue-gray'} onClick={toggleMobileSidebar}>
+                <XMarkIcon className="h-5 w-5" />
+              </IconButton>
+            </div>
+            <NavList isDesktopSidebarOpen={true} />
+          </Drawer>
+  
+          {/* Desktop Sidebar */}
+          <aside className={`${
+            isDesktopSidebarOpen ? 'w-64' : 'w-20'
+          } transition-all duration-300 ease-in-out hidden lg:block ${
+            theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
+          } border-r`}
+          style={{ backgroundColor: colors.background, borderColor: colors.border }}>
+            <div className="p-4">
+              <IconButton onClick={toggleDesktopSidebar} className="mb-4">
+                {isDesktopSidebarOpen ? 
+                  <ChevronLeftIcon className="h-5 w-5" /> 
+                  : 
+                  <ChevronRightIcon className="h-5 w-5" />
+                }
+              </IconButton>
+              <NavList isDesktopSidebarOpen={isDesktopSidebarOpen} />
+            </div>
+          </aside>
+  
+          {/* Main Content */}
+          <main className="flex-grow p-6" style={{ backgroundColor: colors.background, borderColor: colors.border }}>
+            {children}
+          </main>
+        </div>
       </div>
-    </div>
-  );
-}
+    );
+  }

@@ -5,7 +5,7 @@ import { useData } from '../hooks/useData'; // Assuming you have a useData hook
 import { useTheme } from '../contexts/ThemeContext';
 
 const Analytics: React.FC = () => {
-  const { data, loading, error } = useData(); // This should return your csv_data object
+  const { data, loading, error } = useData();
   const { theme, colors } = useTheme();
 
   if (loading) {
