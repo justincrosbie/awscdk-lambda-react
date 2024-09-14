@@ -7,6 +7,7 @@ import {
   MenuHandler,
   MenuList,
   MenuItem,
+  Drawer,
 } from "@material-tailwind/react";
 import {
   Bars3Icon,
@@ -17,9 +18,10 @@ import {
   ChevronLeftIcon,
   ChartBarIcon,
   Cog6ToothIcon,
+  HomeIcon,
 } from "@heroicons/react/24/outline";
 import { useTheme } from '../contexts/ThemeContext';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -27,43 +29,36 @@ interface LayoutProps {
 
 function NavList({ isDesktopSidebarOpen }: { isDesktopSidebarOpen: boolean }) {
   const { theme } = useTheme();
+  const location = useLocation();
+
+  const navItems = [
+    { icon: HomeIcon, text: 'Dashboard', path: '/' },
+    { icon: ChartBarIcon, text: 'Analytics', path: '/analytics' },
+    { icon: Cog6ToothIcon, text: 'Settings', path: '/settings' },
+  ];
 
   return (
     <nav>
       <ul>
-        <li className="mb-2">
-          <Link
-            to="/"
-            className={`flex items-center p-2 rounded ${
-              theme === 'dark' ? 'hover:bg-gray-700 text-white' : 'hover:bg-gray-50 text-gray-900'
-            }`}
-          >
-            <Bars3Icon className="h-5 w-5 mr-2" />
-            {isDesktopSidebarOpen && <span>Dashboard</span>}
-          </Link>
-        </li>
-        <li className="mb-2">
-          <Link
-            to="/analytics"
-            className={`flex items-center p-2 rounded ${
-              theme === 'dark' ? 'hover:bg-gray-700 text-white' : 'hover:bg-gray-50 text-gray-900'
-            }`}
-          >
-            <ChartBarIcon className="h-5 w-5 mr-2" />
-            {isDesktopSidebarOpen && <span>Analytics</span>}
-          </Link>
-        </li>
-        <li className="mb-2">
-          <Link
-            to="/settings"
-            className={`flex items-center p-2 rounded ${
-              theme === 'dark' ? 'hover:bg-gray-700 text-white' : 'hover:bg-gray-50 text-gray-900'
-            }`}
-          >
-            <Cog6ToothIcon className="h-5 w-5 mr-2" />
-            {isDesktopSidebarOpen && <span>Settings</span>}
-          </Link>
-        </li>
+        {navItems.map((item) => (
+          <li key={item.path} className="mb-2">
+            <Link
+              to={item.path}
+              className={`flex items-center p-2 rounded transition-colors duration-200 ${
+                location.pathname === item.path
+                  ? theme === 'dark'
+                    ? 'bg-blue-500 text-white'
+                    : 'bg-blue-50 text-blue-500'
+                  : theme === 'dark'
+                  ? 'text-gray-300 hover:bg-gray-700'
+                  : 'text-gray-700 hover:bg-gray-100'
+              }`}
+            >
+              <item.icon className={`h-5 w-5 mr-2 ${isDesktopSidebarOpen ? '' : 'mx-auto'}`} />
+              {isDesktopSidebarOpen && <span>{item.text}</span>}
+            </Link>
+          </li>
+        ))}
       </ul>
     </nav>
   );
@@ -72,30 +67,36 @@ function NavList({ isDesktopSidebarOpen }: { isDesktopSidebarOpen: boolean }) {
 function ProfileMenu() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const closeMenu = () => setIsMenuOpen(false);
-  const { theme } = useTheme();
-  const textColor = theme === 'dark' ? 'text-white' : 'text-gray-900';
+  const { theme, colors } = useTheme();
 
   return (
-    <Menu open={isMenuOpen} handler={setIsMenuOpen} placement="bottom-end">
-      <MenuHandler>
-        <IconButton variant="text" className={textColor}>
-          <UserCircleIcon className="h-6 w-6" />
-        </IconButton>
-      </MenuHandler>
-      <MenuList className={`p-4 z-50 ${theme === 'dark' ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'}`}>
-        <MenuItem onClick={closeMenu}>My Profile</MenuItem>
-        <MenuItem onClick={closeMenu}>Settings</MenuItem>
-        <MenuItem onClick={closeMenu}>Sign Out</MenuItem>
-      </MenuList>
-    </Menu>
+        <Menu open={isMenuOpen} handler={setIsMenuOpen} placement="bottom-end">
+        <MenuHandler>
+            <IconButton variant="text" className={theme === 'dark' ? 'text-white' : 'text-gray-700'}>
+            <UserCircleIcon className="h-6 w-6" />
+            </IconButton>
+        </MenuHandler>
+        <MenuList className={`p-1 ${theme === 'dark' ? 'bg-gray-800 text-white' : 'bg-white text-gray-700'}`}
+            style={{ backgroundColor: colors.background, borderColor: colors.border }}>
+            <MenuItem onClick={closeMenu} className="flex items-center gap-2 rounded">
+            <UserCircleIcon className="h-4 w-4" /> My Profile
+            </MenuItem>
+            <MenuItem onClick={closeMenu} className="flex items-center gap-2 rounded">
+            <Cog6ToothIcon className="h-4 w-4" /> Settings
+            </MenuItem>
+            <hr className={`my-2 ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`} />
+            <MenuItem onClick={closeMenu} className="flex items-center gap-2 rounded text-red-500 hover:bg-red-500/10 focus:bg-red-500/10 active:bg-red-500/10">
+            Sign Out
+            </MenuItem>
+        </MenuList>
+        </Menu>
   );
 }
 
 export function Layout({ children }: LayoutProps) {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isDesktopSidebarOpen, setIsDesktopSidebarOpen] = useState(true);
-  const { theme } = useTheme();
-  const textColor = theme === 'dark' ? 'text-white' : 'text-gray-900';
+  const { theme, colors } = useTheme();
 
   const toggleMobileSidebar = () => setIsMobileSidebarOpen((cur) => !cur);
   const toggleDesktopSidebar = () => setIsDesktopSidebarOpen((cur) => !cur);
@@ -112,69 +113,78 @@ export function Layout({ children }: LayoutProps) {
   }, []);
 
   return (
-    <div className={`min-h-screen ${theme === 'dark' ? 'dark bg-gray-900 text-white' : 'bg-gray-50 text-gray-900'}`}>
-        <Navbar className={`sticky top-0 z-10 h-max max-w-full rounded-none py-2 px-4 lg:px-8 lg:py-4 
-        ${theme === 'dark' ? 'bg-gray-800 border-none' : 'bg-white border-gray-200'}`}>
+    <div className={`min-h-screen ${theme === 'dark' ? 'dark bg-gray-900 text-white' : 'bg-gray-50 text-gray-700'}`}
+    >
+      <Navbar className={`sticky top-0 z-10 h-max max-w-full rounded-none py-2 px-4 lg:px-8 lg:py-4 
+      ${theme === 'dark' ? 'bg-gray-800 border-none' : 'bg-white border-gray-200'}`}
+      style={{ backgroundColor: colors.background, borderColor: colors.border }}>
         <div className="flex items-center justify-between">
-            <Typography
+          <Typography
             as="a"
             href="#"
             variant="h6"
-            className={`mr-4 cursor-pointer py-1.5 lg:ml-2 ${textColor}`}
-            >
+            className="mr-4 cursor-pointer py-1.5 lg:ml-2 font-bold"
+          >
             Trusst AI
-            </Typography>
-            <div className="hidden lg:block">
+          </Typography>
+          <div className="hidden lg:flex gap-4 items-center">
+            <IconButton variant="text" className={theme === 'dark' ? 'text-white' : 'text-gray-700'}>
+              <BellIcon className="h-5 w-5" />
+            </IconButton>
             <ProfileMenu />
-            </div>
-            <div className="flex items-center gap-4 lg:hidden">
-            <IconButton
-                variant="text"
-                className={`${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}
-                onClick={toggleMobileSidebar}
-            >
-                {isMobileSidebarOpen ? (
-                <XMarkIcon className="h-6 w-6" strokeWidth={2} />
-                ) : (
-                <Bars3Icon className="h-6 w-6" strokeWidth={2} />
-                )}
-            </IconButton>
-            <IconButton variant="text" className={theme === 'dark' ? 'text-white' : 'text-gray-900'}>
-                <BellIcon className="h-6 w-6" />
-            </IconButton>
-            </div>
+          </div>
+          <IconButton
+            variant="text"
+            className="lg:hidden"
+            onClick={toggleMobileSidebar}
+          >
+            {isMobileSidebarOpen ? (
+              <XMarkIcon className="h-6 w-6" strokeWidth={2} />
+            ) : (
+              <Bars3Icon className="h-6 w-6" strokeWidth={2} />
+            )}
+          </IconButton>
         </div>
-        </Navbar>
+      </Navbar>
       <div className="flex">
         {/* Mobile Sidebar */}
-        <aside 
-          className={`fixed inset-y-0 left-0 z-50 w-64 transform ${
-            isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'
-          } transition-transform duration-300 ease-in-out lg:hidden border-r border-gray-200 shadow-lg ${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white'}`}
+        <Drawer
+          open={isMobileSidebarOpen}
+          onClose={toggleMobileSidebar}
+          className={`p-4 ${theme === 'dark' ? 'bg-gray-800' : 'bg-white'}`}
         >
-          <div className="p-4">
-            <IconButton onClick={toggleMobileSidebar} className="mb-4" color={theme === 'dark' ? 'white' : 'blue-gray'}>
+          <div className="mb-6 flex items-center justify-between">
+            <Typography variant="h5" color={theme === 'dark' ? 'white' : 'blue-gray'}>
+              Trusst AI
+            </Typography>
+            <IconButton variant="text" color={theme === 'dark' ? 'white' : 'blue-gray'} onClick={toggleMobileSidebar}>
               <XMarkIcon className="h-5 w-5" />
             </IconButton>
-            <NavList isDesktopSidebarOpen={true} />
           </div>
-        </aside>
+          <NavList isDesktopSidebarOpen={true} />
+        </Drawer>
 
         {/* Desktop Sidebar */}
-        <aside className={`${isDesktopSidebarOpen ? 'w-64' : 'w-20'} transition-all duration-300 ease-in-out hidden lg:block border-r border-gray-200 shadow-lg ${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white'}`}>
+        <aside className={`${
+          isDesktopSidebarOpen ? 'w-64' : 'w-20'
+        } transition-all duration-300 ease-in-out hidden lg:block ${
+          theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
+        } border-r`}
+        style={{ backgroundColor: colors.background, borderColor: colors.border }}>
           <div className="p-4">
             <IconButton onClick={toggleDesktopSidebar} className="mb-4">
               {isDesktopSidebarOpen ? 
-              <ChevronLeftIcon className="h-5 w-5" color={theme === 'dark' ? 'white' : 'black'}/> 
-              : 
-              <ChevronRightIcon className="h-5 w-5" color={theme === 'dark' ? 'white' : 'black'}/>}
+                <ChevronLeftIcon className="h-5 w-5" /> 
+                : 
+                <ChevronRightIcon className="h-5 w-5" />
+              }
             </IconButton>
             <NavList isDesktopSidebarOpen={isDesktopSidebarOpen} />
           </div>
         </aside>
 
         {/* Main Content */}
-        <main className="flex-grow p-4">
+        <main className="flex-grow p-6" style={{ backgroundColor: colors.background, borderColor: colors.border }}>
           {children}
         </main>
       </div>

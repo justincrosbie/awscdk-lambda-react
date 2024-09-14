@@ -6,7 +6,7 @@ import { useTheme } from '../contexts/ThemeContext';
 
 const Analytics: React.FC = () => {
   const { data, loading, error } = useData(); // This should return your csv_data object
-  const { theme } = useTheme();
+  const { theme, colors } = useTheme();
 
   if (loading) {
     return <p>Loading...</p>;
@@ -96,9 +96,10 @@ const Analytics: React.FC = () => {
   const cardBorderColor = theme === 'dark' ? 'border-gray-700' : 'border-gray-200';
 
   return (
-    <div className="w-full">
+    <div className="w-full" style={{ backgroundColor: colors.background, color: colors.text }}>
       {/* Chart Card that fills the width */}
-      <Card className={`w-full shadow-lg rounded-lg ${cardBgColor} border ${cardBorderColor} mb-6`}>
+      <Card className={`w-full shadow-lg rounded-lg ${cardBgColor} border ${cardBorderColor} mb-6`}
+      style={{ backgroundColor: colors.card, borderColor: colors.border }}>
         <CardBody>
           <Typography variant="h4" className={`${textColor} mb-4`}>
             Intent Distribution
@@ -114,7 +115,8 @@ const Analytics: React.FC = () => {
       </Card>
 
       {/* Table Card */}
-      <Card className={`w-full shadow-lg rounded-lg ${cardBgColor} border ${cardBorderColor}`}>
+      <Card className={`w-full shadow-lg rounded-lg ${cardBgColor} border ${cardBorderColor}`}
+      style={{ backgroundColor: colors.card, borderColor: colors.border }}>
         <CardBody>
           <Typography variant="h5" className={`${textColor} mb-4`}>
             Intent Data
